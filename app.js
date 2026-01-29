@@ -91,12 +91,47 @@ app.delete("/images/:id", async (req, res) => {
     }
 });
 
+// 4. Update Image (replace file on Cloudinary)
+app.put("/images/:id", upload.single("image"), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: "No image file provided" });
+        }
+
+        const existingImage = await Image.findById(req.params.id);
+        if (!existingImage) {
+            return res.status(404).json({ error: "Image not found" });
+        }
+
+        const { path, filename } = req.file; // new uploaded file info
+
+        // Try deleting old image from Cloudinary; log but don't fail the whole request
+        try {
+            if (existingImage.public_id) {
+                await cloudinary.uploader.destroy(existingImage.public_id);
+            }
+        } catch (deleteErr) {
+            console.error("Cloudinary deletion warning:", deleteErr);
+        }
+
+        // Update DB record with new file info
+        existingImage.url = path;
+        existingImage.public_id = filename;
+        await existingImage.save();
+
+        res.json({ message: "Image updated", image: existingImage });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 app.get("/", (req, res) => {
     res.send({
         message: "Simple Image CRUD API",
         endpoints: {
             POST: "/upload (form-data: image)",
             GET: "/images",
+            PUT: "/images/:id (form-data: image)",
             DELETE: "/images/:id"
         }
     });
